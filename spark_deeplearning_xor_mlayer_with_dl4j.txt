@@ -1,0 +1,112 @@
+spark-shell --packages org.deeplearning4j:deeplearning4j-core:0.4-rc3.8,org.deeplearning4j:deeplearning4j-nlp:0.4-rc3.8,org.deeplearning4j:dl4j-spark:0.4-rc3.8,org.nd4j:nd4j-x86:0.4-rc3.8,org.nd4j:nd4j-jcublas-7.0:0.4-rc3.8,org.nd4j:nd4j-api:0.4-rc3.8,org.nd4j:canova-api:0.0.0.14
+
+import org.nd4j.linalg.factory.Nd4j
+import org.nd4j.linalg.api.ndarray.INDArray
+var v: INDArray = Nd4j.create(Array(Array(1.0,2.0,3.0), Array(4.0,5.0,6.0)))
+var w = Nd4j.create(Array(Array(1d,2d), Array(3d,4d), Array(5d,6d)))
+w.mul(v)
+
+------------------
+
+import org.deeplearning4j.eval.Evaluation
+import org.deeplearning4j.nn.api.{Layer, OptimizationAlgorithm}
+import org.deeplearning4j.nn.conf.{Updater, NeuralNetConfiguration}
+import org.deeplearning4j.nn.conf.layers.{OutputLayer, DenseLayer}
+import org.deeplearning4j.nn.multilayer.MultiLayerNetwork
+import org.deeplearning4j.nn.weights.WeightInit
+import org.nd4j.linalg.factory.Nd4j
+import org.nd4j.linalg.api.ndarray.INDArray
+import org.nd4j.linalg.lossfunctions.LossFunctions
+
+var input: INDArray = Nd4j.zeros(4,2)
+var labels: INDArray = Nd4j.zeros(4,2)
+
+input.putScalar(Array(0,0),0)
+input.putScalar(Array(0,1),0)
+labels.putScalar(Array(0,0),1)
+labels.putScalar(Array(0,1),0)
+
+input.putScalar(Array(1,0),1)
+input.putScalar(Array(1,1),0)
+labels.putScalar(Array(1,0),0)
+labels.putScalar(Array(1,1),1)
+
+input.putScalar(Array(2,0),0)
+input.putScalar(Array(2,1),1)
+labels.putScalar(Array(2,0),0)
+labels.putScalar(Array(2,1),1)
+
+input.putScalar(Array(3,0),1)
+input.putScalar(Array(3,1),1)
+labels.putScalar(Array(3,0),1)
+labels.putScalar(Array(3,1),0)
+
+import org.nd4j.linalg.dataset.DataSet
+var ds: DataSet = new DataSet(input,labels)
+print(ds)
+
+var builder = new NeuralNetConfiguration.Builder()
+builder.iterations(10000)
+builder.learningRate(0.1)
+builder.seed(123)
+builder.useDropConnect(false)
+builder.optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT)
+builder.biasInit(0)
+builder.miniBatch(false)
+
+// var hiddenLayerBuilder: DenseLayer.Builder = DenseLayer.Builder()
+// hiddenLayerBuilder.nIn(2)
+// hiddenLayerBuilder.nOut(4)
+// hiddenLayerBuilder.activation(Activation.SIGMOID)
+// hiddenLayerBuilder.weightInit(WeightInit.DISTRIBUTION)
+// hiddenLayerBuilder.dist(new UniformDistribution(0,1))
+// hiddenLayerBuilder.layer(0, hiddenLayerBuilder.build())
+
+import org.deeplearning4j.nn.conf.distribution.UniformDistribution
+
+var hiddenLayerBuilder: DenseLayer.Builder = new DenseLayer.Builder().
+  nIn(2).
+  nOut(4).
+  activation("sigmoid").
+  weightInit(WeightInit.DISTRIBUTION).
+  dist(new UniformDistribution(0,1))
+
+
+// var outputLayerBuilder: Builder = new OutputLayer.Builder(LossFunctions.LossFunction.NEGATIVELOGLIKELIHOOD)
+// outputLayerBuilder.nIn(4)
+// outputLayerBuilder.nOut(2)
+// outputLayerBuilder.activation(Activation.SOFTMAX)
+// outputLayerBuilder.weightInit(WeightInit.DISTRIBUTION)
+// outputLayerBuilder.dist(new UniformDistribution(0,1))
+// outputLayerBuilder.layer(1, outputLayerBuilder.build())
+
+var outputLayerBuilder = new OutputLayer.Builder(LossFunctions.LossFunction.NEGATIVELOGLIKELIHOOD).
+  nIn(4).
+  nOut(2).
+  activation("softmax").
+  weightInit(WeightInit.DISTRIBUTION).
+  dist(new UniformDistribution(0,1))
+
+
+// var conf: MultiLayerConfiguration = listBuilder.build()
+
+var conf = builder.list(2).
+  pretrain(false).
+  backprop(true).
+  layer(0, hiddenLayerBuilder.build()).
+  layer(1, outputLayerBuilder.build()).
+  build()
+
+var net: MultiLayerNetwork = new MultiLayerNetwork(conf)
+net.init()
+
+net.fit(ds)
+
+val eval = new Evaluation(2)
+val output = net.output(ds.getFeatureMatrix, Layer.TrainingMode.TEST))
+
+eval.eval(ds.getLabels(), output)
+println(eval.stats())
+
+--------------------------------
+
